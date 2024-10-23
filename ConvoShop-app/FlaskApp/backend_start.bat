@@ -4,6 +4,8 @@ call .\venv\Scripts\activate
 
 python -m pip install -r requirements.txt
 
-python App.py
+@REM python App.py
+
+uvicorn App:app --reload
 
 pause
