@@ -21,12 +21,12 @@ function App() {
     try {
       if (isProductSearch) {
         console.log('Sending product search request:', input);
-        const response = await axios.post('http://localhost:5000/search', { product: input });
+        const response = await axios.post('http://127.0.0.1:8000/search', { product: input });
         console.log('Received product search response:', response.data);
         setProducts(response.data.products || []);
         console.log('Updated products state:', response.data.products || []);
       } else {
-        const response = await axios.post('http://localhost:5000/chat', { message: input });
+        const response = await axios.post('http://127.0.0.1:8000/chat', { message: input });
         const botReply = response.data.reply || 'Sorry, I didn\'t understand that.';
         setMessages([...newMessages, { user: 'Bot', text: botReply }]);
       }
