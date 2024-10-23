@@ -94,18 +94,6 @@ def scrape_daraz(product_name, num_products=5):
     driver.quit()
     return products
 
-# is function ke saath kya karna hai? #2
-"""
- def find_common_words(original_query, extracted_keywords):
-     # Clean and split both the query and keywords into sets of lowercase words
-     original_words = set(re.findall(r'\b\w+\b', original_query.lower()))  # Splitting words
-     extracted_words = set(re.findall(r'\b\w+\b', extracted_keywords.lower()))  # Extracted keywords in list form
-    
-     # Find common words
-     common_words = original_words.intersection(extracted_words)
-     return list(common_words)
-"""
-
 
 def find_common_words(original_query, extracted_keywords):
     # Clean and split both the query and keywords into sets of lowercase words
