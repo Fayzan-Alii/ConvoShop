@@ -1,0 +1,209 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --gradient-start: #4F46E5;
+    --gradient-end: #7C3AED;
+  }
+
+  .dark {
+    --gradient-start: #6366F1;
+    --gradient-end: #8B5CF6;
+  }
+
+  body {
+    @apply bg-slate-50 dark:bg-gray-900 transition-colors duration-300;
+  }
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 transition-all duration-300;
+  background-size: 200% 200%;
+  animation: gradientShift 8s ease infinite;
+}
+
+.dark-gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 transition-all duration-300;
+  background-size: 200% 200%;
+  animation: gradientShift 8s ease infinite;
+}
+
+.animated-text {
+  @apply relative inline-block;
+}
+
+/* Remove the underline effect on hover */
+.animated-text::after {
+  content: none;
+}
+
+/* Letter-by-letter hover effect */
+.animated-text span {
+  @apply relative inline-block transition-all duration-200;
+}
+
+.animated-text span:hover {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400;
+  transform: translateY(-2px) scale(1.2);
+  filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.5));
+}
+
+/* Neon text effect for ConvoShop */
+.neon-brand {
+  @apply relative inline-block bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400;
+}
+
+.neon-brand span {
+  @apply relative inline-block transition-all duration-200;
+}
+
+.neon-brand span:hover {
+  transform: translateY(-2px) scale(1.2);
+  text-shadow: 0 0 10px rgba(99, 102, 241, 0.8), 0 0 20px rgba(139, 92, 246, 0.6), 0 0 30px rgba(236, 72, 153, 0.4);
+  filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.7));
+}
+
+/* Regular text without effects */
+.regular-text span {
+  @apply relative inline-block transition-all duration-200;
+}
+
+.regular-text span:hover {
+  transform: translateY(-2px);
+}
+
+@keyframes textShine {
+  0% {
+    background-position: 0% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.chat-gradient {
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+}
+
+.dark .chat-gradient {
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+}
+
+.glass-effect {
+  @apply backdrop-blur-lg bg-white/80 border border-white/20 dark:bg-gray-800/80 dark:border-gray-700/20 transition-colors duration-300;
+}
+
+.message-bubble {
+  @apply relative px-4 py-2 rounded-2xl max-w-[80%];
+}
+
+.message-bubble.ai {
+  @apply bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-600 dark:to-purple-600 text-white ml-4;
+}
+
+.message-bubble.user {
+  @apply bg-white border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-white mr-4;
+}
+
+.floating-input {
+  @apply transition-all duration-300 ease-in-out transform hover:scale-[1.02] focus:scale-[1.02] dark:bg-gray-800 dark:border-gray-700 dark:text-white;
+}
+
+/* Profile page styles */
+.profile-container {
+  @apply relative overflow-hidden;
+}
+
+.profile-container::before {
+  content: '';
+  @apply absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 dark:from-indigo-600/20 dark:to-purple-600/20 rounded-lg -z-10;
+}
+
+.profile-heading {
+  @apply font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400;
+  text-shadow: 0 2px 10px rgba(99, 102, 241, 0.2);
+}
+
+.profile-card {
+  @apply relative overflow-hidden;
+}
+
+.profile-card::after {
+  content: '';
+  @apply absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-400 dark:to-purple-400;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.5s ease;
+}
+
+.profile-card:hover::after {
+  transform: scaleX(1);
+}
+
+.profile-font {
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Nav logo hover effect */
+.nav-logo {
+  position: relative;
+  display: inline-block;
+}
+
+.nav-logo::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(to right, var(--gradient-start), var(--gradient-end));
+  transition: width 0.3s ease;
+}
+
+.nav-logo:hover::after {
+  width: 100%;
+}
+
+.nav-logo:hover .gradient-text {
+  filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.5));
+  transform: translateY(-1px);
+}
+
+/* Navigation icon hover effects */
+.nav-icon {
+  @apply transition-all duration-300;
+}
+
+.nav-icon:hover {
+  @apply text-transparent bg-clip-text bg-gradient-to-r;
+  filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.5));
+}
+
+@keyframes neon {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
