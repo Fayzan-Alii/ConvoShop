@@ -13,7 +13,7 @@ ConvoShop is an intelligent shopping assistant with real-time product search cap
 ## Technologies Used
 
 - **Backend**: FastAPI, Python, Express.js, Node.js
-- **Database**: MongoDB, Supabase
+- **Database**: MongoDB
 - **AI**: LangChain, LangGraph, Ollama
 - **Web Scraping**: Playwright, BeautifulSoup4, Selenium
 - **Frontend**: TypeScript, React (implied)
@@ -158,26 +158,16 @@ ConvoShop/
 ├── src/                # Frontend source code
 │   ├── lib/            # Utility libraries
 │   │   └── api.ts      # API client functions
-├── supabase/           # Supabase database migrations
 ├── requirements.txt    # Python dependencies
 └── README.md           # Project documentation
 ```
 
 ## Database Schema
 
-The project uses both MongoDB and Supabase:
+The project uses both MongoDB:
 
 ### MongoDB Collections
 - Users: Authentication and user data
 - Chats: Saved conversation history
 - Products: Scraped product information
 
-### Supabase Tables
-- users: Extended user information
-- products: Product catalog
-- bookmarks: User's saved products
-- cart_items: Shopping cart contents
-
-## License
-
-MIT
