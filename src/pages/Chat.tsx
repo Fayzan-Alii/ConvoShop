@@ -10,6 +10,7 @@ import chatAPI, { Product as ScrapedProduct } from '@/lib/chatAPI';
 import { v4 as uuidv4 } from 'uuid';
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { Progress } from '@/components/ui/Progress';
+import { Sparkles } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -64,6 +65,11 @@ export function Chat() {
       timestamp: new Date(),
     },
   ]);
+
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState<boolean>(false);
+  const [productRecommendations, setProductRecommendations] = useState<ScrapedProduct[]>([]);
+  const [selectedProductForRecs, setSelectedProductForRecs] = useState<ScrapedProduct | null>(null);
+
   // Add after your existing state declarations
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
@@ -138,6 +144,46 @@ export function Chat() {
       } catch (error) {
         console.error('Failed to save new chat:', error);
       }
+    }
+  };
+
+  const handleShowRecommendations = async (product: ScrapedProduct) => {
+    if (!product.url) {
+      console.error("Product URL is required for recommendations");
+      return;
+    }
+    
+    setIsLoadingRecommendations(true);
+    setSelectedProductForRecs(product);
+    
+    try {
+      console.log(`Fetching recommendations for ${product.name} from ${product.store}`);
+      const result = await chatAPI.getProductRecommendations(
+        product.url, 
+        product.store || 'Amazon',
+        8
+      );
+      
+      if (result.status === 'success' && result.recommendations) {
+        // Convert to ScrapedProduct format
+        const recs: ScrapedProduct[] = result.recommendations.map((rec: any) => ({
+          name: rec.title || rec.name,
+          price: rec.price,
+          image: rec.image,
+          url: rec.url,
+          store: rec.store || product.store,
+          _id: Date.now() + Math.random().toString(36).substring(2, 9)
+        }));
+        
+        setProductRecommendations(recs);
+      } else {
+        setProductRecommendations([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch recommendations:', error);
+      setProductRecommendations([]);
+    } finally {
+      setIsLoadingRecommendations(false);
     }
   };
 
@@ -399,7 +445,7 @@ export function Chat() {
     try {
       // Start the analysis
       console.log("🔍 Sending analysis request to backend");
-      const response = await reviewAnalysisAPI.analyzeProductReviews(product.url, product.store);
+      const response = await reviewAnalysisAPI.analyzeProductReviews(product.url!, product.store || 'Unknown');
       console.log("🔍 Backend response:", response);
       
       // Poll for status updates
@@ -645,6 +691,16 @@ useEffect(() => {
                                     <BarChart2 className="w-3 h-3 mr-1" />
                                     <span className="text-xs">Reviews</span>
                                   </Button>
+                                  
+                                  <Button 
+                                    size="sm" 
+                                    className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-500 py-1"
+                                    onClick={() => handleShowRecommendations(product)}
+                                    disabled={!product.url}
+                                  >
+                                    <Sparkles className="w-3 h-3 mr-1" />
+                                    <span className="text-xs">Similar</span>
+                                  </Button>
                                 </div>
                               </motion.div>
                             ))}
@@ -815,6 +871,96 @@ useEffect(() => {
                 clearInterval(analysisStatusInterval.current);
               }
               setShowAnalysisModal(false);
+            }}>
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    )}
+    {selectedProductForRecs && (
+      <Modal
+        isOpen={!!selectedProductForRecs}
+        onClose={() => {
+          setSelectedProductForRecs(null);
+          setProductRecommendations([]);
+        }}
+        size="xl"
+      >
+        <ModalContent>
+          <ModalHeader>
+            <div className="flex items-center justify-between w-full">
+              <h3 className="text-lg font-medium">
+                Similar Products to {selectedProductForRecs.name?.substring(0, 40)}{selectedProductForRecs.name?.length > 40 ? '...' : ''}
+              </h3>
+            </div>
+          </ModalHeader>
+          <ModalBody>
+            {isLoadingRecommendations ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+                <p className="mt-4">Loading recommendations...</p>
+              </div>
+            ) : productRecommendations.length > 0 ? (
+              <div className="grid grid-cols-2 gap-4">
+                {productRecommendations.map((rec) => (
+                  <div key={rec._id} className={`border rounded-lg overflow-hidden ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'}`}>
+                    <a href={rec.url} target="_blank" rel="noopener noreferrer" className="block">
+                      <div className="relative h-40">
+                        <img 
+                          src={rec.image} 
+                          alt={rec.name} 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300';
+                          }}
+                        />
+                      </div>
+                      <div className="p-3">
+                        <h4 className={`text-sm font-medium line-clamp-2 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                          {rec.name}
+                        </h4>
+                        <div className="flex justify-between items-center mt-2">
+                          <div className="text-sm font-bold text-indigo-500">
+                            {typeof rec.price === 'string' && rec.price.includes('Rs.') 
+                              ? rec.price 
+                              : (typeof rec.price === 'number' 
+                                ? `$${rec.price.toFixed(2)}` 
+                                : `$${parseFloat(rec.price.toString().replace(/[^0-9.]/g, '')).toFixed(2) || '0.00'}`
+                              )}
+                          </div>
+                          <div className={`text-xs px-2 py-1 rounded-full ${rec.store === 'Amazon' 
+                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100' 
+                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100'}`}>
+                            {rec.store}
+                          </div>
+                        </div>
+                      </div>
+                    </a>
+                    <div className="p-2 flex justify-center">
+                      <Button 
+                        size="sm"
+                        className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 py-1"
+                        onClick={() => handleAddScrapedToCart(rec)}
+                      >
+                        <ShoppingBag className="w-3 h-3 mr-1" />
+                        <span className="text-xs">Add to Cart</span>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8">
+                <AlertCircle className="w-12 h-12 text-amber-500" />
+                <p className="mt-4">No recommendations found for this product</p>
+              </div>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={() => {
+              setSelectedProductForRecs(null);
+              setProductRecommendations([]);
             }}>
               Close
             </Button>
