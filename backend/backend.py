@@ -289,7 +289,8 @@ workflow = StateGraph(state_schema=MessagesState)
 llm = ChatOllama(
     model="qwen2.5:3b", 
     temperature=0.7,
-    repeat_penalty=1.1
+    repeat_penalty=1.1,
+    base_url="http://127.0.0.1:11434"
 ).bind_tools([])  # Bind tools as needed
 
 system_prompt_chat = system_prompt_template | llm
@@ -641,6 +642,58 @@ async def get_review_analysis_status():
     except Exception as e:
         return {"status": "error", "message": f"Error checking analysis status: {str(e)}"}
 
+# Add this model class with your other Pydantic models
+class RecommendationRequest(BaseModel):
+    product_url: str
+    store: str  # 'Amazon' or 'Daraz'
+    max_results: int = 10
+
+# Add this new endpoint with your other routes
+# In backend.py, update the get_recommendations function:
+
+@app.post("/api/recommendations")
+async def get_recommendations(request: RecommendationRequest):
+    """Get product recommendations based on URL"""
+    try:
+        print(f"⭐ Recommendation request for URL: {request.product_url}")
+        print(f"⭐ Store: {request.store}")
+        
+        if request.store.lower() == 'amazon':
+            # Update this path to point to scrapers directory
+            script_path = os.path.join(os.path.dirname(__file__), "scrapers", "amazon_recommendations.py")
+        else:  # Default to Daraz
+            # Update this path to point to scrapers directory
+            script_path = os.path.join(os.path.dirname(__file__), "scrapers", "daraz_recommendations.py")
+        
+        output_file = os.path.join(os.path.dirname(__file__), "data", f"{request.store.lower()}_recommendations.json")
+        
+        # Clean URL by removing query parameters if present
+        clean_url = request.product_url.split("?")[0] if "?" in request.product_url else request.product_url
+        
+        # Run the appropriate scraper as a subprocess
+        print(f"📢 Running scraper: {script_path}")
+        process = subprocess.run([
+            sys.executable,
+            script_path,
+            "--url", clean_url,
+            "--output", output_file,
+            "--max_results", str(request.max_results)
+        ], check=True, capture_output=True, text=True)
+        
+        print(f"📢 Scraper stdout: {process.stdout}")
+        if process.stderr:
+            print(f"⚠️ Scraper stderr: {process.stderr}")
+        
+        # Check if recommendations file was created and has content
+        if os.path.exists(output_file):
+            with open(output_file, 'r', encoding='utf-8') as f:
+                recommendations = json.load(f)
+            return {"status": "success", "recommendations": recommendations}
+        else:
+            return {"status": "error", "message": "No recommendations found"}
+    except Exception as e:
+        print(f"❌ Error fetching recommendations: {e}")
+        return {"status": "error", "message": str(e)}
 
 #-----------------------MongoDB-----------------------------------------------
 # MongoDB Authentication Routes
