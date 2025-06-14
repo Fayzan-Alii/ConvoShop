@@ -3,15 +3,17 @@ import axios from 'axios';
 const CHAT_API_URL = 'http://localhost:8000';
 
 // Define interface for product data
+// Find the Product interface and add the _id property
 export interface Product {
   name: string;
-  price: string | number;
+  price: number | string;
   image: string;
-  store: string;
   url?: string;
+  store?: string;
   specifications?: string;
   stars?: string;
   ratings?: string;
+  _id?: string; // Add this line
 }
 
 export interface Recommendation {
@@ -195,6 +197,25 @@ const chatAPI = {
     });
     return response.data;
   },
+  // Add this method to your existing chatAPI object
+  async getProductRecommendations(
+    productUrl: string, 
+    store: string, 
+    maxResults = 10
+  ): Promise<any> {
+    try {
+      console.log(`Getting recommendations for ${store} product: ${productUrl.substring(0, 50)}...`);
+      const response = await axios.post(`${CHAT_API_URL}/api/recommendations`, {
+        product_url: productUrl,
+        store,
+        max_results: maxResults
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+      return { status: 'error', recommendations: [] };
+    }
+  }
 };
 
 export default chatAPI;
