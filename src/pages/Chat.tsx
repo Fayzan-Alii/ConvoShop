@@ -497,11 +497,11 @@ useEffect(() => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 pt-24">
       <div className="flex gap-6">
-        {/* Chat History Sidebar */}
+        {/* Chat History Sidebar - UPDATED */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="w-80 hidden lg:block"
+          className="w-1/4 min-w-[320px] max-w-[380px] hidden lg:block" 
         >
           <div className={`${theme === 'dark' ? 'bg-gray-800/80' : 'bg-white/80'} backdrop-blur-lg rounded-2xl shadow-lg p-4`}>
             <div className="flex items-center gap-2 mb-6">
@@ -667,20 +667,20 @@ useEffect(() => {
                                   </div>
                                 </a>
                                 
-                                {/* Button group */}
-                                <div className="px-3 pb-3 flex space-x-2">
+                                {/* Button group - UPDATED */}
+                                <div className="px-3 pb-3 flex space-x-1"> {/* Changed from space-x-2 to space-x-1 */}
                                   <Button 
                                     size="sm" 
-                                    className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 py-1"
+                                    className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 py-1 px-1" /* Added px-1 to reduce horizontal padding */
                                     onClick={() => handleAddScrapedToCart(product)}
                                   >
-                                    <ShoppingBag className="w-3 h-3 mr-1" />
-                                    <span className="text-xs">Add to Cart</span>
+                                    <ShoppingBag className="w-3 h-3 mr-0.5" /> {/* Changed mr-1 to mr-0.5 */}
+                                    <span className="text-xs">Add</span> {/* Shortened text from "Add to Cart" to "Add" */}
                                   </Button>
                                   
                                   <Button 
                                     size="sm" 
-                                    className="flex-1 bg-gradient-to-r from-teal-500 to-emerald-500 py-1"
+                                    className="flex-1 bg-gradient-to-r from-teal-500 to-emerald-500 py-1 px-1" /* Added px-1 */
                                     onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
@@ -688,17 +688,17 @@ useEffect(() => {
                                     }}
                                     disabled={!product.url}
                                   >
-                                    <BarChart2 className="w-3 h-3 mr-1" />
+                                    <BarChart2 className="w-3 h-3 mr-0.5" /> {/* Changed mr-1 to mr-0.5 */}
                                     <span className="text-xs">Reviews</span>
                                   </Button>
                                   
                                   <Button 
                                     size="sm" 
-                                    className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-500 py-1"
+                                    className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-500 py-1 px-1" /* Added px-1 */
                                     onClick={() => handleShowRecommendations(product)}
                                     disabled={!product.url}
                                   >
-                                    <Sparkles className="w-3 h-3 mr-1" />
+                                    <Sparkles className="w-3 h-3 mr-0.5" /> {/* Changed mr-1 to mr-0.5 */}
                                     <span className="text-xs">Similar</span>
                                   </Button>
                                 </div>
