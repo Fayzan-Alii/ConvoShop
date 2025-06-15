@@ -519,14 +519,14 @@ SENTIMENT_RESULTS_FILE = os.path.join(os.path.dirname(__file__), "..", "sentimen
 
 security = HTTPBearer()
 
-@app.post("/api/wishlist/check-prices")
-async def check_prices_for_user(background_tasks: BackgroundTasks, credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-    payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-    user_id = payload["id"]
-    # Schedule the daily job for this user
-    schedule_daily_price_check(user_id)
-    return {"status": "scheduled", "message": "Daily price check scheduled at 12am"}
+# @app.post("/api/wishlist/check-prices")
+# async def check_prices_for_user(background_tasks: BackgroundTasks, credentials: HTTPAuthorizationCredentials = Depends(security)):
+#     token = credentials.credentials
+#     payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+#     user_id = payload["id"]
+#     # Schedule the daily job for this user
+#     schedule_daily_price_check(user_id)
+#     return {"status": "scheduled", "message": "Daily price check scheduled at 12am"}
 
 @app.post("/api/analyze-reviews")
 async def analyze_product_reviews(request: ReviewAnalysisRequest, background_tasks: BackgroundTasks):
@@ -577,12 +577,18 @@ async def run_review_scraper_and_analysis(script_path, product_url, output_file)
         
         # Import sentiment analysis function based on store type
         sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-        if "amazon" in script_path.lower():
+        store_type = "amazon" if "amazon" in script_path.lower() else "daraz"
+        
+        if store_type == "amazon":
             print("📢 Using Amazon sentiment analysis module")
             from sentiment_analysis_amazon import process_reviews
+            # Import Amazon star rating scraper
+            from amazon_star_rating import scrape_amazon_star_distribution
         else:
             print("📢 Using Daraz sentiment analysis module")
             from sentiment_analysis_daraz import process_reviews
+            # Import Daraz star rating scraper
+            from daraz_star_rating import scrape_daraz_star_distribution
         
         # Set initial status
         with open(SENTIMENT_RESULTS_FILE, 'w') as f:
@@ -622,7 +628,24 @@ async def run_review_scraper_and_analysis(script_path, product_url, output_file)
                 print(f"📢 Review file content length: {len(content)} bytes")
                 print(f"📢 First 100 chars: {content[:100]}...")
         
-        # Update status
+        # Update status to indicate we're now scraping star distribution
+        with open(SENTIMENT_RESULTS_FILE, 'w') as f:
+            json.dump({"status": "scraping_ratings", "message": "Extracting star rating distribution..."}, f)
+            
+        # Run appropriate star rating scraper based on store type
+        print("📢 Starting star rating distribution scraping...")
+        star_distribution_result = {}
+        try:
+            if store_type == "amazon":
+                star_distribution_result = scrape_amazon_star_distribution(product_url)
+            else:
+                star_distribution_result = scrape_daraz_star_distribution(product_url)
+            print(f"📢 Star distribution result: {star_distribution_result}")
+        except Exception as e:
+            print(f"⚠️ Error scraping star distribution: {e}. Continuing with sentiment analysis.")
+            star_distribution_result = {"star_distribution": {}, "status": "error", "error": str(e)}
+        
+        # Update status for sentiment analysis
         with open(SENTIMENT_RESULTS_FILE, 'w') as f:
             json.dump({"status": "analyzing", "message": "Analyzing sentiment..."}, f)
         
@@ -668,7 +691,11 @@ async def run_review_scraper_and_analysis(script_path, product_url, output_file)
                 "count": neutral_count,
                 "percentage": round((neutral_count / total_reviews) * 100 if total_reviews > 0 else 0, 1)
             },
-            "reviews": analysis_results[:10]  # Send only first 10 reviews for display
+            "reviews": analysis_results[:10],  # Send only first 10 reviews for display
+            # Add star distribution data
+            "star_distribution": star_distribution_result.get("star_distribution", {}),
+            "total_rating_count": sum(star_distribution_result.get("star_distribution", {}).values()),
+            "average_rating": star_distribution_result.get("average_rating", 0)
         }
         
         # Save final results
@@ -1040,7 +1067,6 @@ async def remove_from_wishlist(
 import threading
 import time
 import subprocess
-
 def scrape_and_check_prices(user_id):
     print(f"Running scheduled price check for user {user_id}...")
     conn = get_sqlite_conn()
@@ -1053,62 +1079,69 @@ def scrape_and_check_prices(user_id):
         product_name = item["product_name"]
         image = item["image"]
 
-        # --- Scrape latest price using new scripts ---
         try:
             current_dir = os.path.dirname(__file__)
             if store.lower() == "daraz":
                 script_path = os.path.join(current_dir, "scrapers", "scrape_daraz_price.py")
-                result = subprocess.run(
-                    [sys.executable, script_path, "--url", product_url],
-                    capture_output=True, text=True, check=True
-                )
-                price_str = result.stdout.strip()
             else:
                 script_path = os.path.join(current_dir, "scrapers", "scrape_amazon_price.py")
-                result = subprocess.run(
-                    [sys.executable, script_path, "--url", product_url],
-                    capture_output=True
-                )
-                # Always decode as utf-8, fallback to ignore errors
-                stdout = result.stdout
-                if stdout is not None:
-                    try:
-                        price_str = stdout.decode("utf-8", errors="ignore").strip()
-                    except Exception:
-                        price_str = str(stdout).strip()
-                else:
-                    price_str = ""
-                
 
-            # Clean and convert price
-            latest_price = None
-            if price_str and "not found" not in price_str.lower():
+            result = subprocess.run(
+                [sys.executable, script_path, "--url", product_url],
+                capture_output=True, text=True, check=True
+            )
+            output = result.stdout.strip()
+
+            # Try to parse JSON from output (get the first JSON object if extra prints exist)
+            price_str = ""
+            if output:
                 try:
-                    latest_price = float(price_str.replace(",", "").replace("Rs.", "").replace("$", "").strip() or 0)
+                    # Sometimes the script prints extra lines, so find the JSON part
+                    json_start = output.find('{')
+                    json_end = output.rfind('}') + 1
+                    json_str = output[json_start:json_end]
+                    data = json.loads(json_str)
+                    price_str = data.get("price", "")
+                except Exception as e:
+                    print(f"Error parsing {store} price output: {e}")
+                    continue
+            else:
+                print(f"No output received from {store} scraper")
+                continue
+
+            # Convert to float
+            if price_str and "not found" not in str(price_str).lower():
+                try:
+                    latest_price = float(str(price_str).replace(",", "").replace("Rs.", "").replace("$", "").strip())
                 except Exception as e:
                     print(f"Could not convert price '{price_str}' to float: {e}")
                     continue
             else:
                 print(f"Price not found for {product_url}")
-                continue  # Skip if price not found
+                continue
 
+        except subprocess.CalledProcessError as e:
+            print(f"Scraper failed for {store} URL: {product_url}")
+            print(f"Error output: {e.stderr}")
+            continue
         except Exception as e:
-            print(f"Error scraping {product_url}: {e}")
+            print(f"Unexpected error while scraping: {e}")
             continue
 
-        # --- Compare prices ---
-        if latest_price is not None and latest_price < old_price:
-            # Insert notification
+        # --- Check for price drop ---
+        if latest_price < old_price:
+            print(f"Price drop detected for: {product_name}")
             conn.execute(
                 "INSERT INTO notifications (user_id, product_url, product_name, image, old_price, new_price, store) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (user_id, product_url, product_name, image, str(old_price), str(latest_price), store)
             )
-            # Update wishlist price
             conn.execute(
                 "UPDATE wishlist SET last_checked_price = ? WHERE id = ?",
                 (str(latest_price), item["id"])
             )
             conn.commit()
+
+            # Notify user
             user_doc = users_collection.find_one({"_id": ObjectId(user_id)})
             if user_doc and "email" in user_doc:
                 to_email = user_doc["email"]
@@ -1119,9 +1152,10 @@ def scrape_and_check_prices(user_id):
                 <p><a href="{product_url}">View Product</a></p>
                 """
                 send_email_notification(to_email, subject, body)
+
     conn.close()
     # Schedule next run
-    threading.Timer(30, scrape_and_check_prices, args=[user_id]).start()
+    # threading.Timer(30, scrape_and_check_prices, args=[user_id]).start()
 
 
 # Start the background task when the server starts
@@ -1168,15 +1202,70 @@ async def remove_notification(
 #==================================================================================================#
 
 
+# @app.post("/api/wishlist/check-prices")
+# async def check_prices_for_user(background_tasks: BackgroundTasks, credentials: HTTPAuthorizationCredentials = Depends(security)):
+#     token = credentials.credentials
+#     payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+#     user_id = payload["id"]
+#     background_tasks.add_task(scrape_and_check_prices, user_id)
+#     return {"status": "started", "message": "Price check started in background"}
+# @app.post("/api/wishlist/check-prices")
+# async def check_prices_for_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+#     token = credentials.credentials
+#     payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+#     user_id = payload["id"]
+    
+#     print(f"Starting price check for user {user_id}")
+    
+#     # Check if wishlist is empty
+#     conn = get_sqlite_conn()
+#     wishlist = conn.execute("SELECT COUNT(*) FROM wishlist WHERE user_id = ?", (user_id,)).fetchone()[0]
+#     conn.close()
+    
+#     if wishlist == 0:
+#         print("User has no items in wishlist")
+#         return {"status": "done", "message": "No items in wishlist to check"}
+    
+#     try:
+#         print("Calling scrape_and_check_prices...")
+#         scrape_and_check_prices(user_id)
+#         print("Price check completed")
+#     except Exception as e:
+#         print(f"Error during price check: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return {"status": "error", "message": f"Error checking prices: {str(e)}"}
+    
+#     return {"status": "done", "message": "Price check completed"}
+
 @app.post("/api/wishlist/check-prices")
-async def check_prices_for_user(background_tasks: BackgroundTasks, credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def check_prices_for_user(
+    background_tasks: BackgroundTasks,  # Add this parameter 
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     token = credentials.credentials
     payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     user_id = payload["id"]
+    
+    # Check if wishlist is empty
+    conn = get_sqlite_conn()
+    wishlist_count = conn.execute("SELECT COUNT(*) FROM wishlist WHERE user_id = ?", (user_id,)).fetchone()[0]
+    conn.close()
+    
+    if wishlist_count == 0:
+        return {"status": "done", "message": "No items in wishlist to check"}
+    
+    # Run price check in background instead of synchronously
     background_tasks.add_task(scrape_and_check_prices, user_id)
+    
     return {"status": "started", "message": "Price check started in background"}
 #==================================================================================================#
 
 
 if __name__ == "__main__":
     uvicorn.run(app, host="localhost", port=8000)
+    
+# if __name__ == "__main__":
+#     # Replace with a real user_id from your database
+#     test_user_id = "684ec1459702d67edffc28f4"
+#     scrape_and_check_prices(test_user_id)

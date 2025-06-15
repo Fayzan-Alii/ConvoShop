@@ -11,25 +11,23 @@ export function Navigation() {
   const { scrollY } = useScroll();
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
-  const { totalItems } = useCart();
+  const { totalItems } = useCart(); // kept if needed elsewhere
 
   const [scrolled, setScrolled] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [hasOpenedNotifications, setHasOpenedNotifications] = useState(false);
+  const [wishlistCount, setWishlistCount] = useState(0); // ✅ new state for wishlist count
 
   const opacity = useTransform(scrollY, [0, 100], [1, 0]);
   const translateY = useTransform(scrollY, [0, 100], [0, -100]);
 
   useEffect(() => {
     const handleScroll = () => {
-      const isScrolled = window.scrollY > 20;
-      if (isScrolled !== scrolled) {
-        setScrolled(isScrolled);
-      }
+      setScrolled(window.scrollY > 20);
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [scrolled]);
+  }, []);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -48,17 +46,26 @@ export function Navigation() {
     if (user) fetchNotifications();
   }, [user]);
 
+  useEffect(() => {
+    const fetchWishlistCount = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      try {
+        const res = await fetch('http://localhost:8000/api/wishlist', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setWishlistCount(data.wishlist ? data.wishlist.length : 0);
+      } catch {
+        setWishlistCount(0);
+      }
+    };
+    if (user) fetchWishlistCount();
+  }, [user]);
+
   const navItems = [
-    {
-      to: '/chat',
-      icon: MessageSquare,
-      label: 'Chat',
-    },
-    {
-      to: '/profile',
-      icon: User,
-      label: 'Profile',
-    },
+    { to: '/chat', icon: MessageSquare, label: 'Chat' },
+    { to: '/profile', icon: User, label: 'Profile' },
     {
       to: '/notifications',
       icon: Bell,
@@ -69,16 +76,18 @@ export function Navigation() {
       to: '/cart',
       icon: ShoppingBag,
       label: 'Wishlist',
-      badge: user ? totalItems : null,
+      badge: user ? wishlistCount : null, // ✅ updated
     },
   ];
 
   return (
     <motion.nav
       style={{ opacity, y: translateY }}
-      className={`fixed top-0 left-0 right-0 ${theme === 'dark' ? 'bg-gray-900/90' : 'bg-white/90'
-        } backdrop-blur-xl border-b ${theme === 'dark' ? 'border-gray-800/50' : 'border-gray-200/50'
-        } py-4 px-4 z-50 transition-all duration-300`}
+      className={`fixed top-0 left-0 right-0 ${
+        theme === 'dark' ? 'bg-gray-900/90' : 'bg-white/90'
+      } backdrop-blur-xl border-b ${
+        theme === 'dark' ? 'border-gray-800/50' : 'border-gray-200/50'
+      } py-4 px-4 z-50 transition-all duration-300`}
     >
       <div className="max-w-7xl mx-auto flex justify-between items-center">
         <Link to="/" className="text-2xl font-bold">
@@ -93,9 +102,7 @@ export function Navigation() {
               const isBell = item.label === 'Notifications';
 
               const handleNavClick = () => {
-                if (isBell) {
-                  setHasOpenedNotifications(true);
-                }
+                if (isBell) setHasOpenedNotifications(true);
               };
 
               return (
@@ -107,12 +114,13 @@ export function Navigation() {
                 >
                   <Link to={item.to} className="relative" onClick={handleNavClick}>
                     <motion.div
-                      className={`flex items-center gap-2 px-5 py-3 rounded-xl ${isActive
+                      className={`flex items-center gap-2 px-5 py-3 rounded-xl ${
+                        isActive
                           ? 'text-indigo-600'
                           : theme === 'dark'
-                            ? 'text-gray-300 hover:text-indigo-600'
-                            : 'text-gray-600 hover:text-indigo-600'
-                        } transition-colors duration-200 shadow-lg bg-transparent`}
+                          ? 'text-gray-300 hover:text-indigo-600'
+                          : 'text-gray-600 hover:text-indigo-600'
+                      } transition-colors duration-200 shadow-lg bg-transparent`}
                       whileHover={{
                         scale: 1.03,
                         boxShadow:
@@ -130,42 +138,37 @@ export function Navigation() {
                         <motion.div
                           className="absolute inset-0 rounded-xl bg-transparent"
                           layoutId="nav-pill"
-                          transition={{
-                            type: 'spring',
-                            stiffness: 200,
-                            damping: 20,
-                          }}
+                          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
                           style={{ zIndex: 0 }}
                         />
                       )}
 
                       <motion.div
-                        className={`relative z-10 flex items-center gap-2 ${isBell && notificationCount > 0 && !hasOpenedNotifications
+                        className={`relative z-10 flex items-center gap-2 ${
+                          isBell && notificationCount > 0 && !hasOpenedNotifications
                             ? 'text-red-500 animate-bounce'
                             : ''
-                          }`}
+                        }`}
                         whileHover={{
                           scale: 1.05,
                           transition: { duration: 0.2 },
                         }}
                       >
                         <Icon
-                          className={`w-5 h-5 ${isActive
+                          className={`w-5 h-5 ${
+                            isActive
                               ? 'text-indigo-600'
                               : theme === 'dark'
-                                ? 'text-gray-300'
-                                : 'text-gray-600'
-                            }`}
+                              ? 'text-gray-300'
+                              : 'text-gray-600'
+                          }`}
                         />
                         {item.badge && (
                           <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
                             {item.badge}
                           </span>
                         )}
-                        <span
-                          className={`relative z-10 font-medium ${isActive ? 'scale-105' : ''
-                            }`}
-                        >
+                        <span className={`relative z-10 font-medium ${isActive ? 'scale-105' : ''}`}>
                           {item.label}
                         </span>
                       </motion.div>
@@ -176,7 +179,7 @@ export function Navigation() {
             })}
           </AnimatePresence>
 
-          {/* User info and logout */}
+          {/* User Info */}
           {user ? (
             <div className="flex items-center gap-4">
               <motion.div
@@ -185,10 +188,11 @@ export function Navigation() {
                 exit={{ opacity: 0, scale: 0.95 }}
               >
                 <div
-                  className={`flex items-center gap-2 px-5 py-3 rounded-xl ${theme === 'dark'
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl ${
+                    theme === 'dark'
                       ? 'text-gray-300 hover:text-indigo-600'
                       : 'text-gray-600 hover:text-indigo-600'
-                    } transition-colors duration-200 shadow-lg bg-transparent`}
+                  } transition-colors duration-200 shadow-lg bg-transparent`}
                 >
                   <span className="relative z-10 font-medium">
                     Welcome, {user.email.split('@')[0]}
@@ -211,16 +215,11 @@ export function Navigation() {
             </Link>
           )}
 
-
           {/* Theme toggle */}
           <motion.button
             onClick={toggleTheme}
-            className={`p-3 rounded-full ml-2 bg-transparent`}
-            whileHover={{
-              scale: 1.05,
-              rotate: 180,
-              transition: { duration: 0.3 },
-            }}
+            className="p-3 rounded-full ml-2 bg-transparent"
+            whileHover={{ scale: 1.05, rotate: 180, transition: { duration: 0.3 } }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
           >

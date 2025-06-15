@@ -44,6 +44,58 @@ export function Cart() {
     }
   };
 
+  // const handleCheckPrices = async () => {
+  //   setCheckingPrices(true);
+  //   setCheckMsg(null);
+  //   const token = localStorage.getItem('token');
+  //   if (!token) return;
+  //   try {
+  //     await axios.post(
+  //       'http://localhost:8000/api/wishlist/check-prices',
+  //       {},
+  //       { headers: { Authorization: `Bearer ${token}` } }
+  //     );
+  //     setCheckMsg('Price check started! You will get a notification if any price drops.');
+  //   } catch (e) {
+  //     setCheckMsg('Failed to start price check.');
+  //   }
+  //   setCheckingPrices(false);
+  // };
+
+  // Function to fetch wishlist items
+  const fetchWishlist = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await axios.get(
+        'http://localhost:8000/api/wishlist',
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setWishlist(response.data.wishlist || []);
+    } catch (error) {
+      console.error('Error fetching wishlist:', error);
+    }
+  };
+
+  // Function to fetch notifications
+  const fetchNotifications = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await axios.get(
+        'http://localhost:8000/api/notifications',
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      // If you want to display notifications, add state for it:
+      // setNotifications(response.data.notifications || []);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
+
+  // Then update your handleCheckPrices function:
   const handleCheckPrices = async () => {
     setCheckingPrices(true);
     setCheckMsg(null);
@@ -56,6 +108,12 @@ export function Cart() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setCheckMsg('Price check started! You will get a notification if any price drops.');
+
+      // Add a delay and refresh data
+      setTimeout(async () => {
+        await fetchWishlist();
+        await fetchNotifications();
+      }, 5000);
     } catch (e) {
       setCheckMsg('Failed to start price check.');
     }
@@ -81,9 +139,8 @@ export function Cart() {
     <div className="max-w-7xl mx-auto px-4 py-8 pt-24 space-y-12">
       <div>
         <h2
-          className={`text-2xl font-bold mb-4 ${
-            theme === 'dark' ? 'text-white' : 'text-gray-900'
-          }`}
+          className={`text-2xl font-bold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'
+            }`}
         >
           Your Wishlist
         </h2>
@@ -118,9 +175,8 @@ export function Cart() {
             {wishlist.map((item: any) => (
               <div
                 key={item.product_url}
-                className={`border rounded-lg p-4 ${
-                  theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white'
-                }`}
+                className={`border rounded-lg p-4 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white'
+                  }`}
               >
                 <img
                   src={item.image}
