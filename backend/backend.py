@@ -1,4 +1,10 @@
 import uvicorn
+import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -29,6 +35,8 @@ import sys
 from pathlib import Path
 from fastapi import BackgroundTasks
 from pydantic import BaseModel
+from fastapi import Query
+
 
 
 # Load environment variables
@@ -72,9 +80,31 @@ class UserResponse(BaseModel):
     email: str
 
 #------------------------------------------------------------------------
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
 
+scheduler = BackgroundScheduler()
 
-# Math tools - implement these properly
+def schedule_daily_price_check(user_id):
+    # Remove any existing job for this user
+    job_id = f"price_check_{user_id}"
+    scheduler.remove_job(job_id=job_id, jobstore=None) if scheduler.get_job(job_id) else None
+
+    # Schedule the job at 12:00am every day
+    scheduler.add_job(
+        scrape_and_check_prices,
+        'cron',
+        hour=0,
+        minute=0,
+        args=[user_id],
+        id=job_id,
+        replace_existing=True
+    )
+
+# Start the scheduler when the app starts
+scheduler.start()
+
+# Math tools
 @tool
 def evaluate_float_expression(expr: str) -> float:
     """Evaluates a mathematical expression that has fractional parts or decimals given as a string."""
@@ -179,6 +209,27 @@ def direct_search_daraz_products(query: str, max_results: int = 5) -> list:
         print(f"Error running Daraz scraper: {e}")
         return []
 
+
+def send_email_notification(to_email, subject, body):
+    # Set these with your Zoho email and app password
+    sender_email = "convoshop@zohomail.com"
+    sender_password = "gEFEJpaYu3zK"  # Use Zoho app password
+
+    msg = MIMEMultipart()
+    msg["From"] = sender_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+
+    msg.attach(MIMEText(body, "html"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.zoho.com", 465) as server:
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        print(f"Email sent to {to_email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        
 def direct_search_all_products(query: str, max_results: int = 10) -> list:
     """Search for products across multiple platforms without using LangChain tool."""
     print(f"Direct combined search for: {query}")
@@ -466,6 +517,17 @@ class ReviewAnalysisRequest(BaseModel):
 # Define a file to store the results that the frontend can poll
 SENTIMENT_RESULTS_FILE = os.path.join(os.path.dirname(__file__), "..", "sentiment_analysis_results.json")
 
+security = HTTPBearer()
+
+@app.post("/api/wishlist/check-prices")
+async def check_prices_for_user(background_tasks: BackgroundTasks, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    user_id = payload["id"]
+    # Schedule the daily job for this user
+    schedule_daily_price_check(user_id)
+    return {"status": "scheduled", "message": "Daily price check scheduled at 12am"}
+
 @app.post("/api/analyze-reviews")
 async def analyze_product_reviews(request: ReviewAnalysisRequest, background_tasks: BackgroundTasks):
     """Endpoint to analyze product reviews"""
@@ -697,9 +759,15 @@ async def get_recommendations(request: RecommendationRequest):
 
 #-----------------------MongoDB-----------------------------------------------
 # MongoDB Authentication Routes
+
 @app.post("/api/auth/signup")
 async def signup(user: User):
     try:
+        # Email format validation
+        email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+        if not re.match(email_regex, user.email):
+            raise HTTPException(status_code=400, detail="Invalid email format")
+
         # Check if the user already exists
         existing_user = users_collection.find_one({"email": user.email})
         if existing_user:
@@ -712,7 +780,7 @@ async def signup(user: User):
     except Exception as e:
         print(f"Error during signup: {e}")  # Log the error for debugging
         raise HTTPException(status_code=500, detail="An error occurred during signup")
-
+    
 @app.post("/api/auth/login")
 async def login(user: User):
     existing_user = users_collection.find_one({"email": user.email})
@@ -822,6 +890,293 @@ async def get_formatted_chat_history(user_id: str, chat_id: str):
         return {"history": formatted_history}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 #==================================================================================================#
+#==================================================================================================#
+import sqlite3
+
+# --- SQLite setup ---
+WISHLIST_DB = os.path.join(os.path.dirname(__file__), "wishlist.db")
+
+#==================================================================================================#
+print("Using wishlist DB at:", os.path.abspath(WISHLIST_DB))
+#==================================================================================================#
+
+def get_sqlite_conn():
+    conn = sqlite3.connect(WISHLIST_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+#==================================================================================================#
+
+def init_wishlist_db():
+    conn = get_sqlite_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            product_url TEXT NOT NULL,
+            product_name TEXT,
+            image TEXT,
+            price TEXT,
+            rating TEXT,
+            store TEXT,
+            last_checked_price TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_wishlist_db()
+#==================================================================================================#
+#==================================================================================================#
+
+
+def init_notifications_db():
+    conn = get_sqlite_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            product_url TEXT NOT NULL,
+            product_name TEXT,
+            image TEXT,
+            old_price TEXT,
+            new_price TEXT,
+            store TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_notifications_db()
+
+# --- Pydantic model for wishlist ---
+class WishlistItem(BaseModel):
+    product_url: str
+    product_name: str = ""
+    image: str = ""
+    price: str = ""
+    rating: str = ""
+    store: str = ""
+    last_checked_price: str = ""
+#==================================================================================================#
+
+# --- Add to wishlist endpoint ---
+@app.post("/api/wishlist/add")
+async def add_to_wishlist(
+    item: WishlistItem,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload["id"]  # MongoDB user ID as string
+
+        conn = get_sqlite_conn()
+        # Check if product already exists for this user
+        existing = conn.execute(
+            "SELECT id FROM wishlist WHERE user_id = ? AND product_url = ?",
+            (user_id, item.product_url)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return {"status": "exists", "message": "Product already in wishlist"}
+
+        conn.execute(
+            "INSERT INTO wishlist (user_id, product_url, product_name, image, price, rating, store, last_checked_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, item.product_url, item.product_name, item.image, item.price, item.rating, item.store, item.last_checked_price)
+        )
+        conn.commit()
+        conn.close()
+        return {"status": "success", "message": "Added to wishlist"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+#==================================================================================================#
+
+# --- Get wishlist for user ---
+@app.get("/api/wishlist")
+async def get_wishlist(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        token = credentials.credentials
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload["id"]
+
+        conn = get_sqlite_conn()
+        rows = conn.execute(
+            "SELECT * FROM wishlist WHERE user_id = ?", (user_id,)
+        ).fetchall()
+        conn.close()
+        wishlist = [dict(row) for row in rows]
+        return {"wishlist": wishlist}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+#==================================================================================================#
+@app.delete("/api/wishlist/remove")
+async def remove_from_wishlist(
+    product_url: str = Query(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload["id"]
+
+        conn = get_sqlite_conn()
+        conn.execute(
+            "DELETE FROM wishlist WHERE user_id = ? AND product_url = ?",
+            (user_id, product_url)
+        )
+        conn.commit()
+        conn.close()
+        return {"status": "success", "message": "Removed from wishlist"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+#==================================================================================================#
+#==================================================================================================#
+#==================================================================================================#
+#==================================================================================================#
+import threading
+import time
+import subprocess
+
+def scrape_and_check_prices(user_id):
+    print(f"Running scheduled price check for user {user_id}...")
+    conn = get_sqlite_conn()
+    wishlist = conn.execute("SELECT * FROM wishlist WHERE user_id = ?", (user_id,)).fetchall()
+    for item in wishlist:
+        product_url = item["product_url"]
+        user_id = item["user_id"]
+        old_price = float(item["last_checked_price"].replace(",", "").replace("Rs.", "").replace("$", "").strip() or 0)
+        store = item["store"]
+        product_name = item["product_name"]
+        image = item["image"]
+
+        # --- Scrape latest price using new scripts ---
+        try:
+            current_dir = os.path.dirname(__file__)
+            if store.lower() == "daraz":
+                script_path = os.path.join(current_dir, "scrapers", "scrape_daraz_price.py")
+                result = subprocess.run(
+                    [sys.executable, script_path, "--url", product_url],
+                    capture_output=True, text=True, check=True
+                )
+                price_str = result.stdout.strip()
+            else:
+                script_path = os.path.join(current_dir, "scrapers", "scrape_amazon_price.py")
+                result = subprocess.run(
+                    [sys.executable, script_path, "--url", product_url],
+                    capture_output=True
+                )
+                # Always decode as utf-8, fallback to ignore errors
+                stdout = result.stdout
+                if stdout is not None:
+                    try:
+                        price_str = stdout.decode("utf-8", errors="ignore").strip()
+                    except Exception:
+                        price_str = str(stdout).strip()
+                else:
+                    price_str = ""
+                
+
+            # Clean and convert price
+            latest_price = None
+            if price_str and "not found" not in price_str.lower():
+                try:
+                    latest_price = float(price_str.replace(",", "").replace("Rs.", "").replace("$", "").strip() or 0)
+                except Exception as e:
+                    print(f"Could not convert price '{price_str}' to float: {e}")
+                    continue
+            else:
+                print(f"Price not found for {product_url}")
+                continue  # Skip if price not found
+
+        except Exception as e:
+            print(f"Error scraping {product_url}: {e}")
+            continue
+
+        # --- Compare prices ---
+        if latest_price is not None and latest_price < old_price:
+            # Insert notification
+            conn.execute(
+                "INSERT INTO notifications (user_id, product_url, product_name, image, old_price, new_price, store) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, product_url, product_name, image, str(old_price), str(latest_price), store)
+            )
+            # Update wishlist price
+            conn.execute(
+                "UPDATE wishlist SET last_checked_price = ? WHERE id = ?",
+                (str(latest_price), item["id"])
+            )
+            conn.commit()
+            user_doc = users_collection.find_one({"_id": ObjectId(user_id)})
+            if user_doc and "email" in user_doc:
+                to_email = user_doc["email"]
+                subject = f"Price Drop Alert: {product_name}"
+                body = f"""
+                <h3>Good news!</h3>
+                <p>The price for <b>{product_name}</b> has dropped from <s>{old_price}</s> to <b>{latest_price}</b> at {store}.</p>
+                <p><a href="{product_url}">View Product</a></p>
+                """
+                send_email_notification(to_email, subject, body)
+    conn.close()
+    # Schedule next run
+    threading.Timer(30, scrape_and_check_prices, args=[user_id]).start()
+
+
+# Start the background task when the server starts
+#scrape_and_check_prices()
+#==================================================================================================#
+#==================================================================================================#
+@app.get("/api/notifications")
+async def get_notifications(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        token = credentials.credentials
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload["id"]
+        conn = get_sqlite_conn()
+        rows = conn.execute(
+            "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
+        ).fetchall()
+        conn.close()
+        notifications = [dict(row) for row in rows]
+        return {"notifications": notifications}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+#==================================================================================================#
+
+@app.delete("/api/notifications/remove")
+async def remove_notification(
+    notification_id: int = Query(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload["id"]
+
+        conn = get_sqlite_conn()
+        conn.execute(
+            "DELETE FROM notifications WHERE id = ? AND user_id = ?",
+            (notification_id, user_id)
+        )
+        conn.commit()
+        conn.close()
+        return {"status": "success", "message": "Notification removed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+#==================================================================================================#
+
+
+@app.post("/api/wishlist/check-prices")
+async def check_prices_for_user(background_tasks: BackgroundTasks, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    user_id = payload["id"]
+    background_tasks.add_task(scrape_and_check_prices, user_id)
+    return {"status": "started", "message": "Price check started in background"}
+#==================================================================================================#
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="localhost", port=8000)

@@ -7,6 +7,10 @@ import { Navigation } from '@/components/Navigation';
 import { ThemeProvider } from '@/lib/ThemeContext';
 import { AuthProvider } from '@/lib/AuthContext';
 import { CartProvider } from '@/lib/CartContext';
+import { Notifications } from '@/pages/Notifications';
+
+
+
 
 function App() {
   return (
@@ -21,6 +25,7 @@ function App() {
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/cart" element={<Cart />} />
+                <Route path="/notifications" element={<Notifications />} />
               </Routes>
             </div>
           </Router>

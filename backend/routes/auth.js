@@ -7,6 +7,11 @@ const router = express.Router();
 // Signup
 router.post('/signup', async (req, res) => {
   const { email, password } = req.body;
+  // Email format validation
+  const emailRegex = /^[\w.-]+@[\w.-]+\.\w+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
   try {
     const user = new User({ email, password });
     await user.save();

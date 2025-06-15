@@ -12,23 +12,31 @@ export function AuthForm() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    
+    setFormSuccess(null);
+
     try {
       if (isSignUp) {
         await register(email, password);
+        setFormSuccess('User created successfully! You can now sign in.');
       } else {
         await login(email, password);
       }
     } catch (err: any) {
-      setFormError(err.response?.data?.message || 'Authentication failed');
+      if (err.response && err.response.data && err.response.data.error) {
+        setFormError(err.response.data.error);
+      } else if (err.message) {
+        setFormError(err.message);
+      } else {
+        setFormError('Registration failed');
+      }
     }
   };
 
-  // Split text into individual characters for animation
   const AnimatedTitle = ({ text }: { text: string }) => (
     <div className="inline-block">
       {text.split('').map((char, index) => (
@@ -63,17 +71,7 @@ export function AuthForm() {
       >
         <AnimatedTitle text={isSignUp ? 'Create Account' : 'Welcome Back'} />
       </motion.h2>
-      
-      {(error || formError) && (
-        <motion.div 
-          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          {error || formError}
-        </motion.div>
-      )}
-      
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -109,6 +107,27 @@ export function AuthForm() {
             required
           />
         </motion.div>
+
+        {/* Error and Success Messages */}
+        {formError && (
+          <motion.div 
+            className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mt-2"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {formError}
+          </motion.div>
+        )}
+        {formSuccess && (
+          <motion.div 
+            className="bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded mt-2"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {formSuccess}
+          </motion.div>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -123,6 +142,7 @@ export function AuthForm() {
           </Button>
         </motion.div>
       </form>
+
       <motion.div 
         className="text-center"
         initial={{ opacity: 0 }}
